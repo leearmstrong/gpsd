@@ -133,7 +133,7 @@ boolopts = (
     ("shm_export",    True,  "export via shared memory"),
     # Communication
     ('usb',           True,  "libusb support for USB devices"),
-    ("bluez",         True,  "BlueZ support for Bluetooth devices"),
+    ("bluez",         False,  "BlueZ support for Bluetooth devices"),
     ("ipv6",          True,  "build IPv6 support"),
     ("netfeed",       True,  "build support for handling TCP/IP data sources"),
     # Other daemon options
@@ -147,8 +147,8 @@ boolopts = (
     ("libgpsmm",      True,  "build C++ bindings"),
     ("qt",            True,  "build QT bindings"),
     # Daemon options
-    ("reconfigure",   True,  "allow gpsd to change device settings"),
-    ("controlsend",   True,  "allow gpsctl/gpsmon to change device settings"),
+    ("reconfigure",   False,  "allow gpsd to change device settings"),
+    ("controlsend",   False,  "allow gpsctl/gpsmon to change device settings"),
     ("nofloats",      False, "float ops are expensive, suppress error estimates"),
     ("squelch",       False, "squelch gpsd_log/gpsd_hexdump to save cpu"),
     # Build control
