@@ -182,9 +182,9 @@ nonboolopts = (
                                            "Python module directory prefix"),
     ("max_clients",         '64',          "maximum allowed clients"),
     ("max_devices",         '4',           "maximum allowed devices"),
-    ("fixed_port_speed",    115200,             "fixed serial port speed"),
-    ("fixed_stop_bits",     1,             "fixed serial port stop bits"),
-    ("fixed_parity",        "O",            "fixed serial port parity"),
+    ("fixed_port_speed",    '115200',             "fixed serial port speed"),
+    ("fixed_stop_bits",     '1',             "fixed serial port stop bits"),
+    ("fixed_parity",        'O',            "fixed serial port parity"),
     ("target",              "",            "cross-development target"),
     ("sysroot",             "",            "cross-development system root"),
     )
