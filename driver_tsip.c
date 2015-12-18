@@ -494,7 +494,7 @@ static gps_mask_t tsip_parse_input(struct gps_device_t *session)
 		session->gpsdata.skyview[i].azimuth = (short)round(d2);
 		session->gpsdata.skyview[i].used = false;
 		for (j = 0; j < session->gpsdata.satellites_used; j++)
-		    if (session->gpsdata.skyview[i].PRN != 0 && session->driver.tsip.sats_used[j] != 0)
+		    if (session->gpsdata.skyview[i].PRN != 0 && session->driver.tsip.sats_used[j] == session->gpsdata.skyview[i].PRN)
 			session->gpsdata.skyview[i].used = true;
 	    } else {
 		session->gpsdata.skyview[i].PRN =
@@ -560,10 +560,11 @@ static gps_mask_t tsip_parse_input(struct gps_device_t *session)
 			   " %d", session->driver.tsip.sats_used[i] =
 			   (short)getub(buf, 17 + i));
 	gpsd_log(&session->context->errout, LOG_DATA,
-		 "AIVSS: 0x6d status=%d used=%d "
-		 "pdop=%.1f hdop=%.1f vdop=%.1f tdop=%.1f gdup=%.1f\n",
+		 "AIVSS: 0x6d status=%d used=%d (%s) "
+		 "pdop=%.1f hdop=%.1f vdop=%.1f tdop=%.1f gdop=%.1f\n",
 		 session->gpsdata.status,
 		 session->gpsdata.satellites_used,
+                 buf2,
 		 session->gpsdata.dop.pdop,
 		 session->gpsdata.dop.hdop,
 		 session->gpsdata.dop.vdop,
