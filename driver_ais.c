@@ -118,7 +118,7 @@ bool ais_binary_decode(const struct gpsd_errout_t *errout,
     case 1:	/* Position Report */
     case 2:
     case 3:
-	PERMISSIVE_LENGTH_CHECK(168)
+	PERMISSIVE_LENGTH_CHECK(163)
 	ais->type1.status	= UBITS(38, 4);
 	ais->type1.turn		= SBITS(42, 8);
 	ais->type1.speed	= UBITS(50, 10);
@@ -131,7 +131,10 @@ bool ais_binary_decode(const struct gpsd_errout_t *errout,
 	ais->type1.maneuver	= UBITS(143, 2);
 	//ais->type1.spare	= UBITS(145, 3);
 	ais->type1.raim		= UBITS(148, 1)!=0;
-	ais->type1.radio	= UBITS(149, 19);
+	if(bitlen >= 168)
+		ais->type1.radio	= UBITS(149, 19);
+	if(bitlen < 168)
+		ais->type1.radio	= UBITS(149, bitlen - 149);
 	break;
     case 4: 	/* Base Station Report */
     case 11:	/* UTC/Date Response */
@@ -809,7 +812,7 @@ bool ais_binary_decode(const struct gpsd_errout_t *errout,
 	}
 	break;
     case 16:	/* Assigned Mode Command */
-	RANGE_CHECK(96, 144);
+	RANGE_CHECK(96, 168);
 	ais->type16.mmsi1		= UBITS(40, 30);
 	ais->type16.offset1		= UBITS(70, 12);
 	ais->type16.increment1	= UBITS(82, 10);
@@ -876,7 +879,7 @@ bool ais_binary_decode(const struct gpsd_errout_t *errout,
 	//ais->type19.spare      = UBITS(308, 4);
 	break;
     case 20:	/* Data Link Management Message */
-	RANGE_CHECK(72, 160);
+	RANGE_CHECK(72, 186);
 	//ais->type20.spare		= UBITS(38, 2);
 	ais->type20.offset1		= UBITS(40, 12);
 	ais->type20.number1		= UBITS(52, 4);
@@ -896,7 +899,7 @@ bool ais_binary_decode(const struct gpsd_errout_t *errout,
 	ais->type20.increment4	= UBITS(149, 11);
 	break;
     case 21:	/* Aid-to-Navigation Report */
-	RANGE_CHECK(272, 360);
+	RANGE_CHECK(272, 368);
 	ais->type21.aid_type = UBITS(38, 5);
 	from_sixbit_untrimmed((unsigned char *)bits,
 		    43, 20, ais->type21.name);

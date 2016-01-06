@@ -1185,7 +1185,7 @@ static bool aivdm_decode(const char *buf, size_t buflen,
     unsigned char *field[NMEA_MAX*2];
     unsigned char fieldcopy[NMEA_MAX*2+1];
     unsigned char *data, *cp;
-    unsigned char pad;
+    int pad;
     struct aivdm_context_t *ais_context;
     int i;
 
@@ -1211,10 +1211,19 @@ static bool aivdm_decode(const char *buf, size_t buflen,
     field[nfields++] = (unsigned char *)buf;
     for (cp = fieldcopy;
 	 cp < fieldcopy + buflen; cp++)
-	if (*cp == (unsigned char)',') {
+    {
+	if (
+             (*cp == (unsigned char)',') ||
+             (*cp == (unsigned char)'*')
+           ) {
 	    *cp = '\0';
 	    field[nfields++] = cp + 1;
 	}
+    }
+#ifdef __UNDEF_DEBUG_
+    for(int i=0;i<nfields;i++)
+        gpsd_log(&session->context->errout, LOG_DATA, "field [%d] [%s]\n",i,field[i]);
+#endif
 
     /* discard sentences with exiguous commas; catches run-ons */
     if (nfields < 7) {
@@ -1264,10 +1273,13 @@ static bool aivdm_decode(const char *buf, size_t buflen,
     nfrags = atoi((char *)field[1]); /* number of fragments to expect */
     ifrag = atoi((char *)field[2]); /* fragment id */
     data = field[5];
-    pad = field[6][0]; /* number of padding bits */
+
+    pad = 0;
+    if(isdigit(field[6][0]))
+        pad = field[6][0] - '0'; /* number of padding bits ASCII encoded*/
     gpsd_log(&session->context->errout, LOG_PROG,
-	     "nfrags=%d, ifrag=%d, decoded_frags=%d, data=%s\n",
-	     nfrags, ifrag, ais_context->decoded_frags, data);
+	     "nfrags=%d, ifrag=%d, decoded_frags=%d, data=%s, pad=%d\n",
+	     nfrags, ifrag, ais_context->decoded_frags, data, pad);
 
     /* assemble the binary data */
 
@@ -1311,8 +1323,7 @@ static bool aivdm_decode(const char *buf, size_t buflen,
 	    }
 	}
     }
-    if (isdigit(pad))
-	ais_context->bitlen -= (pad - '0');	/* ASCII assumption */
+    ais_context->bitlen -= pad;
 
     /* time to pass buffered-up data to where it's actually processed? */
     if (ifrag == nfrags) {
