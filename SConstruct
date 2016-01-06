@@ -666,9 +666,10 @@ else:
             announce("You do not have the endian.h header file. RTCM V2 support disabled.")
             env["rtcm104v2"] = False
 
-    # check function after libraries, because some function require library
+    # check function after libraries, because some functions require libraries
     # for example clock_gettime() require librt on Linux glibc < 2.17
-    for f in ("daemon", "strlcpy", "strlcat", "clock_gettime"):
+    # Note: we now condition use of that function on _POSIX_TIMERS.
+    for f in ("daemon", "strlcpy", "strlcat"):
         if config.CheckFunc(f):
             confdefs.append("#define HAVE_%s 1\n" % f.upper())
         else:
@@ -737,7 +738,8 @@ size_t strlcpy(/*@out@*/char *dst, /*@in@*/const char *src, size_t size);
 }
 # endif
 #endif
-#ifndef HAVE_CLOCK_GETTIME
+#include <unistd.h>
+#ifndef _POSIX_TIMERS
 # ifdef __cplusplus
 extern "C" {
 # endif
@@ -1095,10 +1097,23 @@ else:
     # ensure that we build the python modules with scan-build, too
     if env['CC'] is None or env['CC'].find('scan-build') < 0:
         python_env['CC'] = cc
+        # As we seem to be changing compilers we must assume that the
+        # CCFLAGS are incompatible with the new compiler. If we should
+        # use other flags, the variable or the variable for this
+        # should be predefined.
+        if cc.split()[0] != env['CC']:
+            python_env['CCFLAGS'] = ''
     else:
         python_env['CC'] = ' '.join([env['CC']] + cc.split()[1:])
     if env['CXX'] is None or env['CXX'].find('scan-build') < 0:
         python_env['CXX'] = cxx
+        # As we seem to be changing compilers we must assume that the
+        # CCFLAGS or CXXFLAGS are incompatible with the new
+        # compiler. If we should use other flags, the variable or the
+        # variable for this should be predefined.
+        if cxx.split()[0] != env['CXX']:
+            python_env['CCFLAGS'] = '' 
+            python_env['CXXFLAGS'] = ''
     else:
         python_env['CXX'] = ' '.join([env['CXX']] + cxx.split()[1:])
 
