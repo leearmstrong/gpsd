@@ -24,7 +24,7 @@
 # * Coveraging mode: gcc "-coverage" flag requires a hack for building the python bindings
 
 # Release identification begins here
-gpsd_version = "3.16-dev"
+gpsd_version = "3.17~dev"
 
 # client library version
 libgps_version_current   = 22
@@ -666,10 +666,9 @@ else:
             announce("You do not have the endian.h header file. RTCM V2 support disabled.")
             env["rtcm104v2"] = False
 
-    # check function after libraries, because some functions require libraries
+    # check function after libraries, because some function require libraries
     # for example clock_gettime() require librt on Linux glibc < 2.17
-    # Note: we now condition use of that function on _POSIX_TIMERS.
-    for f in ("daemon", "strlcpy", "strlcat"):
+    for f in ("daemon", "strlcpy", "strlcat", "clock_gettime"):
         if config.CheckFunc(f):
             confdefs.append("#define HAVE_%s 1\n" % f.upper())
         else:
@@ -738,8 +737,7 @@ size_t strlcpy(/*@out@*/char *dst, /*@in@*/const char *src, size_t size);
 }
 # endif
 #endif
-#include <unistd.h>
-#ifndef _POSIX_TIMERS
+#ifndef HAVE_CLOCK_GETTIME
 # ifdef __cplusplus
 extern "C" {
 # endif
