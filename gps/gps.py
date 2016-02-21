@@ -18,6 +18,8 @@ from client import *
 from misc import isotime
 
 NaN = float('nan')
+
+
 def isnan(x): return str(x) == 'nan'
 
 # Don't hand-hack this list, it's generated.
@@ -79,6 +81,7 @@ WATCH_PPS	= 0x002000	# enable PPS JSON
 WATCH_NEWSTYLE	= 0x010000	# force JSON streaming
 WATCH_OLDSTYLE	= 0x020000	# force old-style streaming
 
+
 class gpsfix:
     def __init__(self):
         self.mode = MODE_NO_FIX
@@ -96,6 +99,7 @@ class gpsfix:
         self.eps = NaN
         self.epc = NaN
 
+
 class gpsdata:
     "Position, track, velocity and status information returned by a GPS."
 
@@ -106,6 +110,7 @@ class gpsdata:
             self.azimuth = azimuth
             self.ss = ss
             self.used = used
+
         def __repr__(self):
             return "PRN: %3d  E: %3d  Az: %3d  Ss: %3d  Used: %s" % (
                 self.PRN, self.elevation, self.azimuth, self.ss, "ny"[self.used]
@@ -164,8 +169,10 @@ class gpsdata:
             st += "    %r\n" % sat
         return st
 
+
 class gps(gpscommon, gpsdata, gpsjson):
     "Client interface to a running gpsd instance."
+
     def __init__(self, host="127.0.0.1", port=GPSD_PORT, verbose=0, mode=0):
         gpscommon.__init__(self, host, port, verbose)
         gpsdata.__init__(self)
@@ -280,23 +287,23 @@ class gps(gpscommon, gpsdata, gpsjson):
                     self.fix.time = self.utc
                 else:
                     self.fix.time = isotime(self.utc.encode("ascii"))
-            self.fix.ept =       default("ept",   NaN, TIMERR_SET)
-            self.fix.latitude =  default("lat",   NaN, LATLON_SET)
+            self.fix.ept       = default("ept",   NaN, TIMERR_SET)
+            self.fix.latitude  = default("lat",   NaN, LATLON_SET)
             self.fix.longitude = default("lon",   NaN)
-            self.fix.altitude =  default("alt",   NaN, ALTITUDE_SET)
-            self.fix.epx =       default("epx",   NaN, HERR_SET)
-            self.fix.epy =       default("epy",   NaN, HERR_SET)
-            self.fix.epv =       default("epv",   NaN, VERR_SET)
-            self.fix.track =     default("track", NaN, TRACK_SET)
-            self.fix.speed =     default("speed", NaN, SPEED_SET)
-            self.fix.climb =     default("climb", NaN, CLIMB_SET)
-            self.fix.epd =       default("epd",   NaN)
-            self.fix.eps =       default("eps",   NaN, SPEEDERR_SET)
-            self.fix.epc =       default("epc",   NaN, CLIMBERR_SET)
-            self.fix.mode =      default("mode",  0,   MODE_SET)
+            self.fix.altitude  = default("alt",   NaN, ALTITUDE_SET)
+            self.fix.epx       = default("epx",   NaN, HERR_SET)
+            self.fix.epy       = default("epy",   NaN, HERR_SET)
+            self.fix.epv       = default("epv",   NaN, VERR_SET)
+            self.fix.track     = default("track", NaN, TRACK_SET)
+            self.fix.speed     = default("speed", NaN, SPEED_SET)
+            self.fix.climb     = default("climb", NaN, CLIMB_SET)
+            self.fix.epd       = default("epd",   NaN)
+            self.fix.eps       = default("eps",   NaN, SPEEDERR_SET)
+            self.fix.epc       = default("epc",   NaN, CLIMBERR_SET)
+            self.fix.mode      = default("mode",  0,   MODE_SET)
         elif self.data.get("class") == "SKY":
             for attrp in ("x", "y", "v", "h", "p", "g"):
-                setattr(self, attrp+"dop", default(attrp+"dop", NaN, DOP_SET))
+                setattr(self, attrp + "dop", default(attrp + "dop", NaN, DOP_SET))
             if "satellites" in self.data.keys():
                 self.satellites = []
                 for sat in self.data['satellites']:
@@ -332,7 +339,7 @@ class gps(gpscommon, gpsdata, gpsjson):
 
     def stream(self, flags=0, devpath=None):
         "Ask gpsd to stream reports at your client."
-        if (flags & (WATCH_JSON|WATCH_OLDSTYLE|WATCH_NMEA|WATCH_RAW)) == 0:
+        if (flags & (WATCH_JSON | WATCH_OLDSTYLE | WATCH_NMEA | WATCH_RAW)) == 0:
             flags |= WATCH_JSON
         if flags & WATCH_DISABLE:
             if flags & WATCH_OLDSTYLE:
@@ -342,7 +349,7 @@ class gps(gpscommon, gpsdata, gpsjson):
                     return self.send(arg)
             else:
                 gpsjson.stream(self, ~flags, devpath)
-        else: # flags & WATCH_ENABLE:
+        else:  # flags & WATCH_ENABLE:
             if flags & WATCH_OLDSTYLE:
                 arg = 'w+'
                 if flags & WATCH_NMEA:
@@ -350,6 +357,7 @@ class gps(gpscommon, gpsdata, gpsjson):
                     return self.send(arg)
             else:
                 gpsjson.stream(self, flags, devpath)
+
 
 def is_sbas(prn):
     "Is this the NMEA ID of an SBAS satellite?"
@@ -367,7 +375,7 @@ if __name__ == '__main__':
         print 'Usage: gps.py [-v] [host [port]]'
         sys.exit(1)
 
-    opts = { "verbose" : verbose }
+    opts = {"verbose": verbose}
     if len(arguments) > 0:
         opts["host"] = arguments[0]
     if len(arguments) > 1:

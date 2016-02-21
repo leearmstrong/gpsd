@@ -73,56 +73,44 @@ knobs = [
     'tsip',
     'ublox',
     'usb',
+    'xgps',
 ]
 
 
 def main(starting_number_of_options=0):
     import itertools
+    import subprocess
+
     failed_configurations = []
+    dev_null = open('/dev/null', 'w')
+
+    def _run(command, phase):
+        if subprocess.call(command, stdout=dev_null) == 0:
+            return True
+        failed_configurations.append(command)
+        print command
+        with open(phase + '_build_configs.txt', 'a') as failed_configs:
+            failed_configs.write(' '.join(command) + '\n')
+        return False
+
+    static_params = [key + '=on' for key in always_on]
+    static_params += [key + '=off' for key in always_off]
 
     for i in range(starting_number_of_options, len(knobs)):
-        jj = itertools.combinations(knobs, i)
         print 'Testing at length {}'.format(i)
 
-        for row in list(jj):
+        for row in itertools.combinations(knobs, i):
             print row
-            params = []
-
-            for key in always_on:
-                params.append(key + "=on")
-
-            for key in always_off:
-                params.append(key + "=off")
-
-            for key in knobs:
-                if key in row:
-                    params.append(key + "=on")
+            params = static_params + [key + '=on' for key in row]
 
             # print {'on_params': row, 'scons_params': params}
 
-            dev_null = open('/dev/null', 'w')
-            import subprocess
-            command = ['scons', '-j9']
-            command.extend(params)
             if os.path.exists('.scons-option-cache'):
                 os.remove('.scons-option-cache')
-            retval = subprocess.call(['scons', '-c'], stdout=dev_null)
+            subprocess.call(['scons', '-c'], stdout=dev_null)
 
-            retval = subprocess.call(command, stdout=dev_null)
-            if retval != 0:
-                failed_configurations.append(command)
-                print command
-                with open('failed_build_configs.txt', 'a') as failed_configs:
-                    failed_configs.write(' '.join(command) + '\n')
-
-            if retval == 0:
-                command = ['scons', 'check']
-                command.extend(params)
-                retval = subprocess.call(command, stdout=dev_null)
-                if retval != 0:
-                    print command
-                with open('check_build_configs.txt', 'a') as failed_configs:
-                    failed_configs.write(str(retval) + ' ' + ' '.join(command) + '\n')
+            if _run(['scons', '-j9'] + params, 'build'):
+                _run(['scons', 'check'] + params, 'check')
 
     return failed_configurations
 
@@ -130,5 +118,3 @@ if __name__ == '__main__':
     failed = main(0)
     for row in failed:
         print ' '.join(row)
-
-
