@@ -124,7 +124,7 @@ boolopts = (
     ("gpsclock",      False,  "GPSClock support"),
     ("ntrip",         False,  "NTRIP support"),
     ("oceanserver",   False,  "OceanServer support"),
-    ("isync",         True,  "Spectratime iSync LNRClok/GRCLOK support"),
+    ("isync",         False,  "Spectratime iSync LNRClok/GRCLOK support"),
     ("rtcm104v2",     False,  "rtcm104v2 support"),
     ("rtcm104v3",     False,  "rtcm104v3 support"),
     ("passthrough",   False,  "build support for passing through JSON"),
@@ -169,7 +169,7 @@ boolopts = (
     ("manbuild",      True,  "build help in man and HTML formats"),
     ("leapfetch",     True,  "fetch up-to-date data on leap seconds."),
     ("minimal",       False, "turn off every option not set on the command line"),
-    ("xgps",          True,  "include xgps and xgpsspeed."),
+    ("xgps",          False,  "include xgps and xgpsspeed."),
     # Test control
     ("slow",          False, "run tests with realistic (slow) delays"),
     )
