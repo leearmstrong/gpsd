@@ -714,7 +714,6 @@ static gps_mask_t fill_dop(const struct gpsd_errout_t *errout,
 
     memset(satpos, 0, sizeof(satpos));
 
-    gpsd_log(errout, LOG_INF, "Sats used (%d):\n", gpsdata->satellites_used);
     for (n = k = 0; k < gpsdata->satellites_visible; k++) {
 	if (gpsdata->skyview[k].used && !SBAS_PRN(gpsdata->skyview[k].PRN))
 	{
@@ -733,6 +732,9 @@ static gps_mask_t fill_dop(const struct gpsd_errout_t *errout,
 	    n++;
 	}
     }
+    /* can't use gpsdata->satellites_used as that is a counter for xxGSA,
+     * and gets cleared at odd times */
+    gpsd_log(errout, LOG_INF, "Sats used (%d):\n", n);
 
     /* If we don't have 4 satellites then we don't have enough information to calculate DOPS */
     if (n < 4) {
@@ -870,6 +872,19 @@ static void gpsd_error_model(struct gps_device_t *session,
     p_uere =
 	(session->gpsdata.status ==
 	 STATUS_DGPS_FIX ? P_UERE_WITH_DGPS : P_UERE_NO_DGPS);
+
+    /* sanity check the speed, 10,000 m/s should be a nice max */
+    if ( 9999.9 < fix->speed )
+	fix->speed = NAN;
+    else if ( -9999.9 > fix->speed )
+	fix->speed = NAN;
+
+    /* sanity check the climb, 10,000 m/s should be a nice max */
+    if ( 9999.9 < fix->climb )
+	fix->climb = NAN;
+    else if ( -9999.9 > fix->climb )
+	fix->climb = NAN;
+
 
     /*
      * OK, this is not an error computation, but we're at the right

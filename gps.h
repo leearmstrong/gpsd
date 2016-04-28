@@ -63,6 +63,17 @@ extern "C" {
  * timestamp_t is only microSec precision
  * timestamp_t and PPS do not play well together
  */
+
+/* we want cm accuracy and 0.0000001 degrees is 1.11 cm at the equator
+ * the equator is best case for longitude. At 45lat cut that in half.
+ * at 85lat make it 0.00000001
+ *
+ * this easily fits in a C double which has 15.95 digits of precision
+ * printf() format %f defaults to %.6f, which will truncate the result.
+ * so print with %.7f if you have a survey grade GPS.
+ *
+ * ref: https://en.wikipedia.org/wiki/Decimal_degrees
+ */
 typedef double timestamp_t;	/* Unix time in seconds with fractional part */
 
 struct gps_fix_t {
@@ -271,7 +282,7 @@ struct rtcm3_basic_rtk {
     unsigned int channel;	/* Satellite Frequency Channel Number
 				   (GLONASS only) */
     double pseudorange;		/* Pseudorange */
-    double rangediff;		/* PhaseRange – Pseudorange in meters */
+    double rangediff;		/* PhaseRange - Pseudorange in meters */
     unsigned char locktime;	/* Lock time Indicator */
 };
 
@@ -280,7 +291,7 @@ struct rtcm3_extended_rtk {
     unsigned int channel;	/* Satellite Frequency Channel Number
 				   (GLONASS only) */
     double pseudorange;		/* Pseudorange */
-    double rangediff;		/* PhaseRange – L1 Pseudorange */
+    double rangediff;		/* PhaseRange - L1 Pseudorange */
     unsigned char locktime;	/* Lock time Indicator */
     unsigned char ambiguity;	/* Integer Pseudorange
 					   Modulus Ambiguity */
@@ -522,7 +533,7 @@ struct rtcm3_t {
 	    char receiver[RTCM3_MAX_DESCRIPTOR+1];	/* Receiver string */
 	    char firmware[RTCM3_MAX_DESCRIPTOR+1];	/* Firmware string */
 	} rtcm3_1033;
-	char data[1024];		/* Max RTCM3 msg length is 1023 bytes */
+	unsigned char data[1024];	/* Max RTCM3 msg length is 1023 bytes */
     } rtcmtypes;
 };
 
@@ -1786,10 +1797,11 @@ struct ais_t
     };
 };
 
+/* basic data, per PRN, from GPGSA and GPGSV */
 struct satellite_t {
     double ss;		/* signal-to-noise ratio (dB) */
-    bool used;		/* PRNs of satellites used in solution */
-    short PRN;		/* PRNs of satellite */
+    bool used;		/* this satellite used in solution */
+    short PRN;		/* PRN of this satellite */
     short elevation;	/* elevation of satellite */
     short azimuth;	/* azimuth */
 };

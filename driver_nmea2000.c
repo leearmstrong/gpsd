@@ -19,6 +19,7 @@
 #include <sys/ioctl.h>
 
 #include "gpsd.h"
+#include "libgps.h"
 #if defined(NMEA2000_ENABLE)
 #include "driver_nmea2000.h"
 #include "bits.h"
@@ -1700,7 +1701,7 @@ int nmea2000_open(struct gps_device_t *session)
 	session->driver.nmea2000.unit = unit_number;
 	session->driver.nmea2000.unit_valid = true;
     } else {
-        strncpy(can_interface_name[can_net],
+        strlcpy(can_interface_name[can_net],
 		interface_name,
 		MIN(sizeof(can_interface_name[0]), sizeof(interface_name)));
 	session->driver.nmea2000.unit_valid = false;

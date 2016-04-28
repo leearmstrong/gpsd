@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <unistd.h>
 
+#include "gps.h"	/* for safe_atof() */
 #include "gpsd_config.h"
 #include "ntpshm.h"
 #include "revision.h"
@@ -34,7 +35,7 @@ int main(int argc, char **argv)
     while ((option = getopt(argc, argv, "c:hn:st:vV")) != -1) {
 	switch (option) {
 	case 'c':
-	    cycle = atof(optarg);
+	    cycle = safe_atof(optarg);
 	    break;
 	case 'n':
 	    nsamples = atoi(optarg);

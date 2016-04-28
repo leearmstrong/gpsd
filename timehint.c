@@ -105,8 +105,6 @@
  * garbage-collects them when they have no attached processes.
  */
 
-#define PPS_MIN_FIXES	3	/* # fixes to wait for before shipping PPS */
-
 static volatile struct shmTime *getShmTime(struct gps_context_t *context, int unit)
 {
     int shmid;
@@ -358,7 +356,7 @@ static char *report_hook(volatile struct pps_thread_t *pps_thread,
     struct gps_device_t *session = (struct gps_device_t *)pps_thread->context;
 
     /* PPS only source never get any serial info
-     * so no PPSTIME_IS or fixcnt */
+     * so no NTPTIME_IS or fixcnt */
     if ( source_pps != session->sourcetype) {
         /* FIXME! these two validations need to move back into ppsthread.c */
 
@@ -371,10 +369,9 @@ static char *report_hook(volatile struct pps_thread_t *pps_thread,
 	 * required on all Garmin and u-blox; safest to do it
 	 * for all cases as we have no other general way to know
 	 * if PPS is good.
-	 *
-	 * Not sure yet how to handle u-blox UBX_MODE_TMONLY
 	 */
-	if (session->fixcnt <= PPS_MIN_FIXES)
+	if (session->fixcnt <= NTP_MIN_FIXES &&
+	    (session->gpsdata.set & GOODTIME_IS) == 0)
 	    return "no fix";
     }
 
@@ -445,6 +442,14 @@ void ntpshm_link_activate(struct gps_device_t *session)
 	} else {
 	    init_hook(session);
 	    session->pps_thread.report_hook = report_hook;
+	    /*
+	     * The Raspberry Pi kludge. If we're using /dev/ttyAMA0, 
+	     * and there is a static /dev/pps0, and we have access because
+	     * we're root, assume we want to use KPPS. 
+	     */
+	    if (strcmp(session->pps_thread.devicename, "/dev/ttyAMA0") == 0
+	    		&& access("/dev/pps0", R_OK | W_OK) == 0)
+		session->pps_thread.devicename = "/dev/pps0";
 	    pps_thread_activate(&session->pps_thread);
 	}
     }

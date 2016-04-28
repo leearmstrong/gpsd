@@ -2,7 +2,7 @@
 :description: How to set up an NTP Stratum 1 server using GPSD.
 :keywords: time, GPSD, NTP, time, precision, 1PPS, PPS, stratum, jitter
 Gary E. Miller <gem@rellim.com>, Eric S. Raymond <esr@thyrsus.com>
-v2.4, Mar 2015
+v2.5, Apr 2016
 
 This document is mastered in asciidoc format.  If you are reading it in HTML,
 you can find the original at the GPSD project website.
@@ -119,14 +119,15 @@ just by timestamping the arrival of the first character in the report
 on each fix and correcting for a relatively small fixed latency
 composed of fix-processing and RS232 transmission time.
 
-At one character per ten bits (counting framing at stopbits) a
+At one character per ten bits (counting framing and stopbits) a
 9600-bps serial link introduces about a mSec of latency *per
 character*; furthermore, your kernel will normally delay delivery
 of characters to your application until the next timer tick, about
 every 4 mSec in modern kernels. Both USB and RS232 will incur that
 approximately 5mSec-per-char latency overhead.  You'll have to deal
 with this latency even on chips like the Venus 6 that claim the
-beginning of their reporting burst is synced to PPS.
+beginning of their reporting burst is synced to PPS.  (Such claims are
+not always reliable, in any case.)
 
 Unfortunately, fix reports are also delayed in the receiver and on
 the link by as much as several hundred mSec, and this delay is not
@@ -177,13 +178,13 @@ plain-vanilla x86 PCs with clock speeds in the 2GHz range.
 
 All the previous figures assume you're using PPS delivered over RS232.
 USB GPS receivers that deliver 1PPS are rare, but do exist. Notably,
-there's the Navisys GR601-W. In case this device goes out of
-production it's worth noting that it's a trivial modification of the
-stock two-chip-on-a-miniboard commodity-GPS-receiver design of engine
-plus USB-to-serial adapter; the GR601-W wires a u-blox 6 to a Prolific
-Logic PL23203.  To get 1PPS out, just wire the 1PPS pin from the GPS
-engine to the Carrier Detect pin on the USB adapter. (This is known as
-the "Macx-1 mod".)
+there's the Navisys GR601-W and GR701-W. In case these devices go out
+of production it's worth noting that they are a trivial modification
+of the stock two-chip-on-a-miniboard commodity-GPS-receiver design of
+engine plus USB-to-serial adapter; the GR601-W wires a u-blox 6 to a
+Prolific Logic PL23203, the GR-701 uses a u-blox 7.  To get 1PPS out,
+this design just wires the 1PPS pin from the GPS engine to the Carrier
+Detect pin on the USB adapter. (This is known as the "Macx-1 mod".)
 
 With this design, 1PPS from the engine will turn into a USB event that
 becomes visible to the host system (and GPSD) the next time the USB
@@ -205,7 +206,7 @@ will ensue.
 | PPS                   | &plusmn;5uSec
 | USB 1.1 poll interval | &plusmn;1mSec
 | USB 2.0 poll interval | &plusmn;100&mu;Sec (100000 nSec)
-| Network NTP time      | ~&plusmn;30mSec footnote:[RFC5905 says "a few tens of milliseconds", but asymmetric routing can produce 100mSec jitter]
+| Network NTP time      | ~&plusmn;30mSec footnote:[RFC5905 says "a few tens of milliseconds", but asymmetric routing can produce 100mSec offset]
 |=====================================================
 
 Observed variations from the typical figure increase towards the bottom
@@ -271,7 +272,7 @@ set. Usually they will be set to "m", which is sufficient.
 NetBSD has included the RFC2783 Pulse Per Second API for real serial
 ports by default since 1998, and it works with ntpd.  NetBSD 7
 (forthcoming) includes RFC2783 support for USB-serial devices, and
-this works (with ntpd) with the GR601-W.  However, gpsd's code
+this works (with ntpd) with the GR601-W/GR701-W.  However, gpsd's code
 interacts badly with the NetBSD implementation, and gpsd's support for
 RFC2783 PPS does not yet work on NetBSD (for serial or USB).
 
@@ -304,7 +305,7 @@ are unlikely to be significant to you; flip a coin.
 
 To get 1PPS to your NTP daemon, you first need to get it from a
 PPS-capable GPS receiver. As of early 2015 this means either the
-previously mentioned GR601-W or a serial GPS receiver with 1PPS.
+previously mentioned GR devices or a serial GPS receiver with 1PPS.
 
 You can find 1PPS-capable devices supported by GPSD at <<HARDWARE>>.
 Note that the most popular consumer-grade GPS receivers do not usually
@@ -327,17 +328,19 @@ deliver three orders of magnitude better accuracy and repeatability -
 enough to meet prevailing standards for a public Stratum 1 server.
 
 Among newer receiver designs the authors found the the u-blox line of
-receivers used in the GR601-W to be particularly good.  Very detailed
-information on its timing performance can be found at
+receivers used in the GR601-W and GR701-W to be particularly good.
+Very detailed information on its timing performance can be found at
 <<UBLOX-TIMING>>. One of us (Raymond) has recent experience with an
 eval kit, the EVK 6H-0-001, that would make an excellent Stratum 0
 device.
 
-Both the EVK 6H and GR601-W are built around the LEA-6H module, which
+Both the EVK 6H and GR601-W.GR701-W are built around the LEA-6H module, which
 is a relatively inexpensive but high-quality navigation GPS
 receiver. We make a note of this because u-blox also has a specialized
-timing variant, the LEA 6T, which would be expensive overkill for an
-NTP server.
+timing variant, the LEA 6T, which would probably be overkill for an
+NTP server. (The 6T does have the virtue that you could probably get a
+good fix from one satellite in view once it knows its location, but
+the part is expensive and difficult to find.)
 
 Unfortunately as of early 2015 the LEA-6H is still hard to find in a
 packaged RS232 version, as opposed to a bare OEM module exporting TTL
@@ -590,11 +593,11 @@ restrict -6 default kod nomodify notrap nopeer noquery
 restrict 127.0.0.1 mask 255.255.255.0
 restrict -6 ::1
 
-# GPS Serial data reference
+# GPS Serial data reference (NTP0)
 server 127.127.28.0
 fudge 127.127.28.0 time1 0.9999 refid GPS
 
-# GPS PPS reference
+# GPS PPS reference (NTP1)
 server 127.127.28.1 prefer
 fudge 127.127.28.1 refid PPS
 -----------------------------------------------------------------------------
@@ -610,11 +613,11 @@ fudge 127.127.28.0 refid GPS
 
 This is equivalent to declaring a time1 of 0.
 
-The pool statement adds 4 servers as additional time references needed
-by ntpd for redundancy and to give you a reference to see how well
-your local GPS receiver is performing.  If you are outside of the USA replace
-the pool servers with one in your local area. See <<USE-POOL>> for
-further information.
+The pool statement adds a variable number of servers (often 10) as
+additional time references needed by ntpd for redundancy and to give you
+a reference to see how well your local GPS receiver is performing.  If
+you are outside of the USA replace the pool servers with one in your
+local area. See <<USE-POOL>> for further information.
 
 The pool statement, and the driftfile and logfile declarations after it,
 will not be strictly necessary if the default ntp.conf that your
@@ -640,11 +643,11 @@ restrict -6 default kod nomodify notrap nopeer noquery
 restrict 127.0.0.1 mask 255.255.255.0
 restrict -6 ::1
 
-# GPS Serial data reference
+# GPS Serial data reference (NTP0)
 server 127.127.28.0 minpoll 4 maxpoll 4
 fudge 127.127.28.0 time1 0.9999 refid GPS
 
-# GPS PPS reference
+# GPS PPS reference (NTP1)
 server 127.127.28.1 minpoll 4 maxpoll 4 prefer
 fudge 127.127.28.1 refid PPS
 -----------------------------------------------------------------------------
@@ -654,14 +657,16 @@ Alternative configurations exist, but it is recommended that you upgrade
 ntpd, if feasible.
 
 The magic pseudo-IP address 127.127.28.0 identifies unit 0 of the ntpd
-shared-memory driver; 127.127.28.1 identifies unit 1.  Unit 0 is used
-for in-band message timestamps and unit 1 for the (more accurate,
-when available) time derived from combining in-band message timestamps
-with the out-of-band PPS synchronization pulse.  Splitting these
-notifications allows ntpd to use its normal heuristics to weight them.
+shared-memory driver (NTP0); 127.127.28.1 identifies unit 1 (NTP1).
+Unit 0 is used for in-band message timestamps and unit 1 for the (more
+accurate, when available) time derived from combining in-band message
+timestamps with the out-of-band PPS synchronization pulse.  Splitting
+these notifications allows ntpd to use its normal heuristics to weight
+them.
 
-(Different units - 2 and 3, respectively - must be used when gpsd is not
-started as root.)
+Different units - 2 (NTP2) and 3 (NTP3), respectively - must be used
+when gpsd is not started as root.  Some GPS HATs put PPS time on a GPIO
+pin and will also use unit 2 (NTP2) for the PPS time correction.
 
 With this configuration, ntpd will read the timestamp posted by gpsd
 every 64 seconds (16 if non-root) and send it to unit 0.
@@ -727,7 +732,7 @@ the system logs for error messages from ntpd.
 Notice the 1st and 3rd servers, stratum 1 servers, disagree by more than
 8 mSec.  The 1st and 2nd servers disagree by over 12 mSec.  Our local
 PPS reference agrees to the clock.sjc.he.net server within the expected
-jitter of the GR-601W in use.
+jitter of the GR-601-W in use.
 
 When no other servers or local reference clocks appear in the NTP
 configuration, the system clock will lock onto the GPS clock, but this
@@ -859,8 +864,23 @@ $ su - (or sudo -s )
 -----------------------------------------------------------------------------
 
 After you have verified with cgps that your GPS receiver has a good 3D
-lock you can check how chrony is doing by running 'chronyc sources'.
-Your output will look like this:
+lock you can check that gpsd is outputing good time by running ntpshmmon.
+
+-----------------------------------------------------------------------------
+# ntpshmmon 
+ntpshmmon version 1
+#      Name   Seen@                Clock                Real               L Prec
+sample NTP0 1461537438.593729271 1461537438.593633306 1461537438.703999996 0 -1
+sample NTP1 1461537439.000421494 1461537439.000007374 1461537439.000000000 0 -20
+sample NTP0 1461537439.093844900 1461537438.593633306 1461537438.703999996 0 -1
+sample NTP0 1461537439.621309382 1461537439.620958240 1461537439.703999996 0 -1
+sample NTP1 1461537440.000615395 1461537439.999994105 1461537440.000000000 0 -20
+sample NTP0 1461537440.122079148 1461537439.620958240 1461537439.703999996 0 -1
+^C
+-----------------------------------------------------------------------------
+
+Once ntpshmmon shows good time data you can see how chrony is doing by
+running 'chronyc sources'.  Your output will look like this:
 
 -----------------------------------------------------------------------------
 # chronyc sources
@@ -993,7 +1013,7 @@ Note that a server can be a poor performer (what the NTP documentation
 colorfully calls a "falseticker") for any of three reasons. It may be
 shipping bad time, or the best routes between you and it have large
 latency variations (jitter), or it may have a time-asymmetric route,
-to you (that is, B-to-A time is omn average very different from A-to-B
+to you (that is, B-to-A time is on average very different from A-to-B
 time).  Asymmetric routing is the most common cause of serious
 problems.
 
@@ -1095,11 +1115,11 @@ This prints the average offset.
 ==== Loopstats-based procedure ====
 
 Recall that magic pseudo-IP address 127.127.28.0 identifies unit 0 of
-the ntpd shared-memory driver; 127.127.28.1 identifies unit 1.  Unit 0
-is used for in-band message timestamps (IMT) and unit 1 for the (more
-accurate, when available) time derived from combining IMT with the
-out-of-band PPS synchronization pulse.  Splitting these notifications
-allows ntpd to use its normal heuristics to weight them.
+the ntpd shared-memory driver (NTP0); 127.127.28.1 identifies unit
+1(NTP1).  Unit 0 is used for in-band message timestamps (IMT) and unit
+1 for the (more accurate, when available) time derived from combining
+IMT with the out-of-band PPS synchronization pulse.  Splitting these
+notifications allows ntpd to use its normal heuristics to weight them.
 
 We assume that the 1PPS signal, being just one bit long, and directly
 triggering an interrupt, is always on time (sic).  Correcting for latency
@@ -1352,15 +1372,15 @@ If you are using ntpd, then add the last three lines below to your
 master ntp.conf file to configure the SHM.
 
 -----------------------------------------------------------------------------
-# GPS Serial data reference
+# GPS Serial data reference (NTP0)
 server 127.127.28.0
 fudge 127.127.28.0 time1 0.9999 refid GPS
 
-# GPS PPS reference
+# GPS PPS reference (NTP1)
 server 127.127.28.1 prefer
 fudge 127.127.28.1 refid PPS
 
-# local PTP reference
+# local PTP reference (NTP2)
 server 127.127.28.2
 fudge 127.127.28.2 refid PTP
 -----------------------------------------------------------------------------
@@ -1408,7 +1428,7 @@ If you are using ntpd, then add the last three lines below to your
 master ntp.conf file to configure your one and only SHM.
 
 -----------------------------------------------------------------------------
-# local PTP reference
+# local PTP reference (NTP0)
 server 127.127.28.0
 fudge 127.127.28.0 refid PTP
 -----------------------------------------------------------------------------
@@ -1634,4 +1654,7 @@ by Jaap Winius <jwinius@rjsystems.nl>.
 2.4 Mar 2015::
     Removed some typos, corrected formatting, and minor changes.
     A bit more specificity about root vs. non-root.
+
+2.5 Apr 2016::
+    Note the existence of the GR701-W.
 
