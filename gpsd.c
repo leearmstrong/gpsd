@@ -1407,7 +1407,7 @@ static void pseudonmea_report(struct subscriber_t *sub,
 	    (void)throttled_write(sub, buf, strlen(buf));
 	}
 
-	if ((changed & SATELLITE_SET) != 0) {
+	if ((changed & (SATELLITE_SET|USED_IS)) != 0) {
 	    nmea_sky_dump(device, buf, sizeof(buf));
 	    gpsd_log(&context.errout, LOG_IO,
 		     "<= GPS (binary sky) %s: %s\n",
@@ -1474,9 +1474,15 @@ static void all_reports(struct gps_device_t *device, gps_mask_t changed)
      * If the device provided an RTCM packet, repeat it to all devices.
      */
     if ((changed & RTCM2_SET) != 0 || (changed & RTCM3_SET) != 0) {
-	if (device->lexer.outbuflen > RTCM_MAX) {
+	if ((changed & RTCM2_SET) != 0
+                   && device->lexer.outbuflen > RTCM_MAX) {
 	    gpsd_log(&context.errout, LOG_ERROR,
 		     "overlong RTCM packet (%zd bytes)\n",
+		     device->lexer.outbuflen);
+	} else if ((changed & RTCM3_SET) != 0
+		   && device->lexer.outbuflen > RTCM3_MAX) {
+	    gpsd_log(&context.errout, LOG_ERROR,
+		     "overlong RTCM3 packet (%zd bytes)\n",
 		     device->lexer.outbuflen);
 	} else {
 	    struct gps_device_t *dp;
@@ -1505,11 +1511,11 @@ static void all_reports(struct gps_device_t *device, gps_mask_t changed)
 #ifdef NTP_ENABLE
     /*
      * Time is eligible for shipping to NTPD if the driver has
-     * asserted PPSTIME_IS at any point in the current cycle.
+     * asserted NTPTIME_IS at any point in the current cycle.
      */
     if ((changed & CLEAR_IS)!=0)
 	device->ship_to_ntpd = false;
-    if ((changed & PPSTIME_IS)!=0)
+    if ((changed & NTPTIME_IS)!=0)
 	device->ship_to_ntpd = true;
     /*
      * Only update the NTP time if we've seen the leap-seconds data.
@@ -1517,7 +1523,8 @@ static void all_reports(struct gps_device_t *device, gps_mask_t changed)
      */
     if ((changed & TIME_SET) == 0) {
 	//gpsd_log(&context.errout, LOG_PROG, "NTP: No time this packet\n");
-    } else if ( 0 >= device->fixcnt ) {
+    } else if ( NTP_MIN_FIXES > device->fixcnt &&
+		(changed & GOODTIME_IS) == 0) {
         /* many GPS spew random times until a valid GPS fix */
 	//gpsd_log(&context.errout, LOG_PROG, "NTP: no fix\n");
     } else if (isnan(device->newdata.time)) {

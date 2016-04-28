@@ -3,7 +3,71 @@
 # This file is Copyright (c) 2010 by the GPSD project
 # BSD terms apply: see the file COPYING in the distribution root for details.
 
-import time, calendar, math
+# This code runs compatibly under Python 2 and 3.x for x >= 2.
+# Preserve this property!
+from __future__ import absolute_import, print_function, division
+
+import time, calendar, math, io
+
+# Determine a single class for testing "stringness"
+try:
+    STR_CLASS = basestring  # Base class for 'str' and 'unicode' in Python 2
+except NameError:
+    STR_CLASS = str         # In Python 3, 'str' is the base class
+
+# We need to be able to handle data which may be a mixture of text and binary
+# data.  The text in this context is known to be limited to US-ASCII, so
+# there aren't any issues regarding character sets, but we need to ensure
+# that binary data is preserved.  In Python 2, this happens naturally with
+# "strings" and the 'str' and 'bytes' types are synonyms.  But in Python 3,
+# these are distinct types (with 'str' being based on Unicode), and conversions
+# are encoding-sensitive.  The most straightforward encoding to use in this
+# context is 'latin-1' (a.k.a.'iso-8859-1'), which directly maps all 256
+# 8-bit character values to Unicode page 0.  Thus, if we can enforce the use
+# of 'latin-1' encoding, we can preserve arbitrary binary data while correctly
+# mapping any actual text to the proper characters.
+
+BINARY_ENCODING = 'latin-1'
+
+if bytes is str:  # In Python 2 these functions can be null transformations
+
+    polystr = str
+    polybytes = bytes
+
+    def make_std_wrapper(stream):
+        "Dummy stdio wrapper function."
+        return stream
+
+else:  # Otherwise we do something real
+
+    def polystr(o):
+        "Convert bytes or str to str with proper encoding."
+        if isinstance(o, str):
+            return o
+        if isinstance(o, bytes):
+            return str(o, encoding=BINARY_ENCODING)
+        raise ValueError
+
+    def polybytes(o):
+        "Convert bytes or str to bytes with proper encoding."
+        if isinstance(o, bytes):
+            return o
+        if isinstance(o, str):
+            return bytes(o, encoding=BINARY_ENCODING)
+        raise ValueError
+
+    def make_std_wrapper(stream):
+        "Standard input/output wrapper factory function"
+        # This ensures that the encoding of standard output and standard
+        # error on Python 3 matches the binary encoding we use to turn
+        # bytes to Unicode in polystr above.
+        #
+        # newline="\n" ensures that Python 3 won't mangle line breaks
+        # line_buffering=True ensures that interactive command sessions
+        # work as expected
+        return io.TextIOWrapper(stream.buffer, encoding=BINARY_ENCODING,
+                                newline="\n", line_buffering=True)
+
 
 # some multipliers for interpreting GPS output
 METERS_TO_FEET	= 3.2808399	# Meters to U.S./British feet
@@ -25,7 +89,7 @@ def Deg2Rad(x):
 
 
 def Rad2Deg(x):
-    "Radians to degress."
+    "Radians to degrees."
     return x * (180 / math.pi)
 
 
@@ -55,8 +119,10 @@ def CalcRad(lat):
     return r
 
 
-def EarthDistance((lat1, lon1), (lat2, lon2)):
+def EarthDistance(c1, c2):
     "Distance in meters between two points specified in degrees."
+    (lat1, lon1) = c1
+    (lat2, lon2) = c2
     x1 = CalcRad(lat1) * math.cos(Deg2Rad(lon1)) * math.sin(Deg2Rad(90 - lat1))
     x2 = CalcRad(lat2) * math.cos(Deg2Rad(lon2)) * math.sin(Deg2Rad(90 - lat2))
     y1 = CalcRad(lat1) * math.sin(Deg2Rad(lon1)) * math.sin(Deg2Rad(90 - lat1))
@@ -75,8 +141,10 @@ def EarthDistance((lat1, lon1), (lat2, lon2)):
     return CalcRad((lat1 +lat2) / 2) * math.acos(a)
 
 
-def MeterOffset((lat1, lon1), (lat2, lon2)):
+def MeterOffset(c1, c2):
     "Return offset in meters of second arg from first."
+    (lat1, lon1) = c1
+    (lat2, lon2) = c2
     dx = EarthDistance((lat1, lon1), (lat1, lon2))
     dy = EarthDistance((lat1, lon1), (lat2, lon1))
     if lat1 < lat2:
@@ -88,14 +156,14 @@ def MeterOffset((lat1, lon1), (lat2, lon2)):
 
 def isotime(s):
     "Convert timestamps in ISO8661 format to and from Unix time."
-    if type(s) == type(1):
+    if isinstance(s, int):
         return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(s))
-    elif type(s) == type(1.0):
+    elif isinstance(s, float):
         date = int(s)
         msec = s - date
         date = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(s))
         return date + "." + repr(msec)[3:]
-    elif type(s) == type("") or type(s) == type(u""):
+    elif isinstance(s, STR_CLASS):
         if s[-1] == "Z":
             s = s[:-1]
         if "." in s:

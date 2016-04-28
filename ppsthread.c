@@ -190,7 +190,7 @@ static int init_kernel_pps(struct inner_context_t *inner_context)
      * strlcpy() is not available.)
      */
     if (strncmp(pps_thread->devicename, "/dev/pps", 8) == 0)
-	(void)strncpy(path, pps_thread->devicename, sizeof(path));
+	(void)strncpy(path, pps_thread->devicename, sizeof(path)-1);
     else {
 	char pps_num = '\0';  /* /dev/pps[pps_num] is our device */
 	size_t i;             /* to match type of globbuf.gl_pathc */
@@ -268,8 +268,9 @@ static int init_kernel_pps(struct inner_context_t *inner_context)
 	char errbuf[BUFSIZ] = "unknown error";
 	(void)strerror_r(errno, errbuf, sizeof(errbuf));
 	pps_thread->log_hook(pps_thread, THREAD_INF,
-		    "KPPS:%s cannot open %s: %s\n",
+		    "KPPS:%s running as %d/%d, cannot open %s: %s\n",
 		    pps_thread->devicename,
+		    getuid(), geteuid(),
                     path, errbuf);
     	return -1;
     }
@@ -653,9 +654,10 @@ static void *gpsd_ppsmonitor(void *arg)
      * TIOMCIWAIT, which is linux specifix
      * RFC2783, a.k.a kernel PPS (KPPS)
      * or if KPPS is deficient a combination of the two */
-    if ( isatty(thread_context->devicefd) == 0 ) {
-	thread_context->log_hook(thread_context, THREAD_INF,
-            "KPPS:%s gps_fd:%d not a tty\n",
+    if ( 0 > thread_context->devicefd
+      || 0 == isatty(thread_context->devicefd) ) {
+	thread_context->log_hook(thread_context, THREAD_PROG,
+            "KPPS:%s gps_fd:%d not a tty, can not use TIOMCIWAIT\n",
             thread_context->devicename,
             thread_context->devicefd);
         /* why do we care the device is a tty? so as not to ioctl(TIO..)
@@ -747,6 +749,8 @@ static void *gpsd_ppsmonitor(void *arg)
 
 	    edge_tio = (state_tio > state_last_tio) ? 1 : 0;
 
+	    state_last_tio = state_tio;
+
             /* three things now known about the current edge:
              * clock_ts - time of the edge
              * state - the serial line input states
@@ -773,7 +777,7 @@ static void *gpsd_ppsmonitor(void *arg)
 
 	    timespec_str( &clock_ts, ts_str1, sizeof(ts_str1) );
 	    thread_context->log_hook(thread_context, THREAD_PROG,
-		    "TPPS:%s %.10s cycle: %d, duration: %d @ %s\n",
+		    "TPPS:%s %.10s, cycle: %lld, duration: %lld @ %s\n",
 		    thread_context->devicename, edge_str, cycle, duration,
                     ts_str1);
 
@@ -840,7 +844,7 @@ static void *gpsd_ppsmonitor(void *arg)
 
 	    timespec_str( &clock_ts_kpps, ts_str1, sizeof(ts_str1) );
 	    thread_context->log_hook(thread_context, THREAD_PROG,
-		"KPPS:%s %.10s cycle: %7d, duration: %7d @ %s\n",
+		"KPPS:%s %.10s cycle: %7lld, duration: %7lld @ %s\n",
 		thread_context->devicename,
 		edge_str,
 		cycle_kpps, duration_kpps, ts_str1);
@@ -898,7 +902,7 @@ static void *gpsd_ppsmonitor(void *arg)
 	state_last = state;
 	timespec_str( &clock_ts, ts_str1, sizeof(ts_str1) );
 	thread_context->log_hook(thread_context, THREAD_PROG,
-	    "PPS:%s %.10s cycle: %7d, duration: %7d @ %s\n",
+	    "PPS:%s %.10s cycle: %7lld, duration: %7lld @ %s\n",
 	    thread_context->devicename,
 	    edge_str,
 	    cycle, duration, ts_str1);
