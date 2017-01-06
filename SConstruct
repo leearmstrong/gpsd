@@ -24,7 +24,7 @@
 # * Coveraging mode: gcc "-coverage" flag requires a hack for building the python bindings
 
 # Release identification begins here
-gpsd_version = "3.17~dev"
+gpsd_version = "3.17~dev~pftsip"
 
 # client library version
 libgps_version_current   = 23
@@ -114,7 +114,7 @@ boolopts = (
     ("navcom",        False,  "Navcom NCT support"),
     ("oncore",        False,  "Motorola OnCore chipset support"),
     ("sirf",          False,  "SiRF chipset support"),
-    ("skytraq",       True,  "Skytraq chipset support"),
+    ("skytraq",       False,  "Skytraq chipset support"),
     ("superstar2",    False,  "Novatel SuperStarII chipset support"),
     ("tnt",           False,  "True North Technologies support"),
     ("tripmate",      False,  "DeLorme TripMate support"),
