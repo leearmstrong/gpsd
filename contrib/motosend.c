@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <time.h>  /* For nanosleep() and time() */
 #include <unistd.h>
 #include <limits.h>
 
@@ -31,6 +32,7 @@ int main(int argc, char **argv) {
 	struct termios term;
 	char buf[BSIZ];
 	time_t s, t;
+	struct timespec delay;
 
 	if (argc != 5){
 		fprintf(stderr, "usage: motosend <speed> <port> msgtype moto-body-hex\n");
@@ -82,8 +84,12 @@ int main(int argc, char **argv) {
 	tcflush(fd, TCIOFLUSH);
 	t = 0; n = 0;
 	while (1){
-		usleep(1000);
-		bzero(buf, BSIZ);
+		/* wait 1,000 uSec */
+		delay.tv_sec = 0;
+		delay.tv_nsec = 1000000L;
+		nanosleep(&delay, NULL);
+
+		memset(buf, 0, BSIZ);
 		if ((l = read(fd, buf, BSIZ)) == -1)
 			if (!(EINTR == errno || EAGAIN == errno))
 				err(1, "read");
@@ -121,7 +127,7 @@ static int moto_send(int fd, char *type, char *body ) {
 	if ((buf = malloc(l+7)) == NULL)
 		return -1;
 
-	bzero(buf, l+7);
+	memset(buf, 0, l+7);
 	buf[0] = '@'; buf[1] = '@';
 	buf[2] = type[0]; buf[3] = type[1];
 
@@ -174,7 +180,7 @@ int gpsd_hexpack(char *src, char *dst, int len)
     if ((l < 1) || (l > len))
 	return -1;
 
-    bzero(dst, len);
+    memset(dst, 0, len);
     for (i = 0; i < l; i++) {
 	int k;
 	if ((k = hex2bin(src+i*2)) != -1)

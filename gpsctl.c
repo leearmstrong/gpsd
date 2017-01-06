@@ -4,6 +4,18 @@
  * BSD terms apply: see the file COPYING in the distribution root for details.
  *
  */
+
+#ifdef __linux__
+/* FreeBSD chokes on this */
+/* sys/ipc.h needs _XOPEN_SOURCE, 500 means X/Open 1995 */
+#define _XOPEN_SOURCE 500
+/* pselect() needs _POSIX_C_SOURCE >= 200112L */
+#define _POSIX_C_SOURCE 200112L
+#endif /* __linux__ */
+
+/* strlcpy() needs _DARWIN_C_SOURCE */
+#define _DARWIN_C_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -43,11 +55,18 @@ static bool hunting = true;
 static void settle(struct gps_device_t *session)
 /* allow the device to settle after a control operation */
 {
+    struct timespec delay;
+
     /*
      * See the 'deep black magic' comment in serial.c:set_serial().
      */
     (void)tcdrain(session->gpsdata.gps_fd);
-    (void)usleep(50000);
+
+    /* wait 50,000 uSec */
+    delay.tv_sec = 0;
+    delay.tv_nsec = 50000000L;
+    nanosleep(&delay, NULL);
+
     (void)tcdrain(session->gpsdata.gps_fd);
 }
 #endif /* defined(RECONFIGURE_ENABLE) || defined(CONTROLSEND_ENABLE) */

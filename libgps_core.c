@@ -5,6 +5,10 @@
  * This file is Copyright (c) 2010 by the GPSD project
  * BSD terms apply: see the file COPYING in the distribution root for details.
  */
+
+/* for vsnprintf() FreeBSD wants __ISO_C_VISIBLE >= 1999 */
+#define __ISO_C_VISIBLE 1999
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -49,6 +53,10 @@ void libgps_trace(int errlevel, const char *fmt, ...)
 	(void)fputs(buf, debugfp);
     }
 }
+#else
+// Functions defined as so to furfil the API but otherwise do nothing when built with debug capability turned off
+void gps_enable_debug(int level UNUSED, FILE * fp UNUSED) {}
+void libgps_trace(int errlevel UNUSED, const char *fmt UNUSED, ...){}
 #endif /* LIBGPS_DEBUG */
 
 #ifdef SOCKET_EXPORT_ENABLE

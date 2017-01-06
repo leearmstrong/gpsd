@@ -2,6 +2,10 @@
  * This file is Copyright (c) 2010 by the GPSD project
  * BSD terms apply: see the file COPYING in the distribution root for details.
  */
+
+/* for vsnprintf() FreeBSD wants __ISO_C_VISIBLE >= 1999 */
+#define __ISO_C_VISIBLE 1999
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -554,6 +558,11 @@ static gps_mask_t processGSA(int count, char *field[],
      * 16   = HDOP
      * 17   = VDOP
      *
+     * Not all documentation specifies the number of PRN fields, it
+     * may be variable.  Most doc that specifies says 12 PRNs.
+     *
+     * the CH-4701 ourputs 24 PRNs!
+     *
      * The Skytraq S2525F8-BD-RTK output both GPGSA and BDGSA in the
      * same cycle:
      * $GPGSA,A,3,23,31,22,16,03,07,,,,,,,1.8,1.1,1.4*3E
@@ -563,7 +572,10 @@ static gps_mask_t processGSA(int count, char *field[],
      * Some GPS emit GNGSA.  So far we have not seen a GPS emit GNGSA
      * and then another flavor of xxGSA
      *
-     * SEANEXX and others will emit two adjacent GNGSA:
+     * Some Skytraq will emit all GPS in one GNGSA, Then follow with
+     * another GNGSA with the BeiDou birds.
+     *
+     * SEANEXX and others also do it:
      * $GNGSA,A,3,31,26,21,,,,,,,,,,3.77,2.55,2.77*1A
      * $GNGSA,A,3,75,86,87,,,,,,,,,,3.77,2.55,2.77*1C
      * seems like the first is GNSS and the second GLONASS
@@ -800,8 +812,10 @@ static gps_mask_t processGSV(int count, char *field[],
      * get a bad result on the second and later SV spans.  Note, this code
      * assumes that if any of the special sat pics occur they come right
      * after a stock GPGSV one.
+     *
+     * FIXME: Add per-talker totals so we can do this check properly.
      */
-    if (session->nmea.seen_glgsv || session->nmea.seen_bdgsv || session->nmea.seen_qzss)
+    if (!(session->nmea.seen_glgsv || session->nmea.seen_bdgsv || session->nmea.seen_qzss))
 	if (session->nmea.part == session->nmea.await
 		&& atoi(field[3]) != session->gpsdata.satellites_visible)
 	    gpsd_log(&session->context->errout, LOG_WARN,
@@ -1244,7 +1258,7 @@ static gps_mask_t processTNTA(int c UNUSED, char *field[],
 	osc->running = (quality > 0);
 	osc->reference = (deltachar && (deltachar != '?'));
 	if (osc->reference) {
-	    if (abs(delta) < 500) {
+	    if (delta < 500) {
 		osc->delta = fine;
 	    } else {
 		osc->delta = ((delta < 500000000) ? delta : 1000000000 - delta);
@@ -1528,6 +1542,9 @@ static gps_mask_t processPSTI030(int count, char *field[],
      * 13    1.2          RTK Age
      * 14    4.2          RTK Ratio
      * 15    *68          mandatory nmea_checksum
+     *
+     * In private email, SkyTraq says F mode is 10x more accurate
+     * than R mode.
      */
     gps_mask_t mask = 0;
 
@@ -1594,9 +1611,10 @@ static gps_mask_t processPSTI030(int count, char *field[],
     return mask;
 }
 
-/* Skytraq sentences take this format:
+/*
+ * Skytraq sentences take this format:
  * $PSTI,type[,val[,val]]*CS
- * type is a 2 digit subsentence type
+ * type is a 2 or 3 digit subsentence type
  *
  * Note: this sentence can be at least 100 chars long.
  * That violates the NMEA max of 82.
@@ -1667,6 +1685,37 @@ static gps_mask_t processPSTI(int count, char *field[],
 
     return 0;
 }
+
+/*
+ * Skytraq undocumented debug sentences take this format:
+ * $STI,type,val*CS
+ * type is a 2 char subsentence type
+ * Note: NO checksum
+ */
+static gps_mask_t processSTI(int count, char *field[],
+			       struct gps_device_t *session)
+{
+    gps_mask_t mask;
+
+    /* set something, so it won't look like an unknown sentence */
+    mask |= ONLINE_SET;
+
+    if ( 0 != strncmp(session->subtype, "Skytraq", 7) ) {
+	/* this is skytraq, but marked yet, so probe for Skytraq */
+	(void)gpsd_write(session, "\xA0\xA1\x00\x02\x02\x01\x03\x0d\x0a",9);
+    }
+
+    if ( 0 == strcmp( field[1], "IC") ) {
+	/* $STI,IC,error=XX, this is always very bad, but undocumented */
+	gpsd_log(&session->context->errout, LOG_ERROR,
+		     "Skytraq: $STI,%s,%s\n", field[1], field[2]);
+        return mask;
+    }
+    gpsd_log(&session->context->errout, LOG_DATA,
+		 "STI,%s: Unknown type, Count: %d\n", field[1], count);
+
+    return mask;
+}
 #endif /* SKYTRAQ_ENABLE */
 
 /**************************************************************************
@@ -1733,7 +1782,8 @@ gps_mask_t nmea_parse(char *sentence, struct gps_device_t * session)
 	{"PTNTA", 8, false, processTNTA},
 #endif /* TNT_ENABLE */
 #ifdef SKYTRAQ_ENABLE
-	{"PSTI", 2, false, processPSTI},	/* Skytraq */
+	{"PSTI", 2, false, processPSTI},	/* $PSTI Skytraq */
+	{"STI", 2, false, processSTI},		/* $STI  Skytraq */
 #endif /* SKYTRAQ_ENABLE */
 	{"RMC", 8,  false, processRMC},
 	{"TXT", 5,  false, processTXT},
@@ -1746,6 +1796,9 @@ gps_mask_t nmea_parse(char *sentence, struct gps_device_t * session)
     unsigned int i, thistag;
     char *p, *s, *e;
     volatile char *t;
+#ifdef SKYTRAQ_ENABLE
+    bool skytraq_sti = false;
+#endif
 
     /*
      * We've had reports that on the Garmin GPS-10 the device sometimes
@@ -1770,6 +1823,13 @@ gps_mask_t nmea_parse(char *sentence, struct gps_device_t * session)
 	++p;
     if (*p == '*')
 	*p++ = ',';		/* otherwise we drop the last field */
+#ifdef SKYTRAQ_ENABLE_UNUSED
+    /* $STI is special, no trailing *, or chacksum */
+    if ( 0 != strncmp( "STI,", sentence, 4) ) {
+	skytraq_sti = true;
+	*p++ = ',';		/* otherwise we drop the last field */
+    }
+#endif
     *p = '\0';
     e = p;
 
@@ -1801,8 +1861,14 @@ gps_mask_t nmea_parse(char *sentence, struct gps_device_t * session)
     for (thistag = i = 0;
 	 i < (unsigned)(sizeof(nmea_phrase) / sizeof(nmea_phrase[0])); ++i) {
 	s = session->nmea.field[0];
-	if (strlen(nmea_phrase[i].name) == 3)
+	if (strlen(nmea_phrase[i].name) == 3
+#ifdef SKYTRAQ_ENABLE
+	        /* $STI is special */
+		&& !skytraq_sti
+#endif
+		) {
 	    s += 2;		/* skip talker ID */
+        }
 	if (strcmp(nmea_phrase[i].name, s) == 0) {
 	    if (nmea_phrase[i].decoder != NULL
 		&& (count >= nmea_phrase[i].nf)) {
@@ -1874,7 +1940,7 @@ gps_mask_t nmea_parse(char *sentence, struct gps_device_t * session)
 	if (!GPS_TIME_EQUAL
 	    (session->nmea.this_frac_time,
 	     session->nmea.last_frac_time)) {
-	    uint lasttag = session->nmea.lasttag;
+	    unsigned int lasttag = session->nmea.lasttag;
 	    retval |= CLEAR_IS;
 	    gpsd_log(&session->context->errout, LOG_PROG,
 		     "%s starts a reporting cycle.\n",
