@@ -2,6 +2,10 @@
  * This file is Copyright (c) 2010 by the GPSD project
  * BSD terms apply: see the file COPYING in the distribution root for details.
  */
+
+/* for vsnprintf() FreeBSD wants __ISO_C_VISIBLE >= 1999 */
+#define __ISO_C_VISIBLE 1999
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -287,10 +291,15 @@ const struct gps_type_t driver_nmea0183 = {
 static void garmin_mode_switch(struct gps_device_t *session, int mode)
 /* only does anything in one direction, going to Garmin binary driver */
 {
+    struct timespec delay;
+
     if (mode == MODE_BINARY) {
 	(void)nmea_send(session, "$PGRMC1,1,2,1,,,,2,W,N");
 	(void)nmea_send(session, "$PGRMI,,,,,,,R");
-	(void)usleep(333);	/* standard Garmin settling time */
+        /* wait 333 uSec, standard Garmin settling time */
+	delay.tv_sec = 0;
+	delay.tv_nsec = 333000L;
+	nanosleep(&delay, NULL);
     }
 }
 #endif /* RECONFIGURE_ENABLE */
@@ -603,11 +612,17 @@ static const struct gps_type_t driver_tripmate = {
 
 static void earthmate_event_hook(struct gps_device_t *session, event_t event)
 {
+    struct timespec delay;
+
     if (session->context->readonly)
 	return;
     if (event == event_triggermatch) {
 	(void)gpsd_write(session, "EARTHA\r\n", 8);
-	(void)usleep(10000);
+        /* wait 10,000 uSec */
+	delay.tv_sec = 0;
+	delay.tv_nsec = 10000000L;
+	nanosleep(&delay, NULL);
+
 	(void)gpsd_switch_driver(session, "Zodiac");
     }
 }
@@ -1593,7 +1608,7 @@ static void path_rewrite(struct gps_device_t *session, char *prefix)
      * beginning of the path attribute, followed by a # to separate it
      * from the device.
      */
-    char *prefloc;
+    char *prefloc, *sfxloc;
 
     assert(prefix != NULL && session->lexer.outbuffer != NULL);
 
@@ -1613,6 +1628,8 @@ static void path_rewrite(struct gps_device_t *session, char *prefix)
 	    (void)strlcpy(prefloc,
 			  session->gpsdata.dev.path,
 			  sizeof(session->gpsdata.dev.path));
+	    if ((sfxloc = strchr(prefloc, '#')))
+		*sfxloc = '\0';  /* Avoid accumulating multiple device names */
 	    (void)strlcat((char *)session->lexer.outbuffer, "#",
 			  sizeof(session->lexer.outbuffer));
 	    (void)strlcat((char *)session->lexer.outbuffer,

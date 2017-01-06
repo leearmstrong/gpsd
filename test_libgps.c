@@ -10,8 +10,6 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-#define LIBGPS_DEBUG
-
 #include "gps.h"
 #include "libgps.h"
 #include "gpsdclient.h"
@@ -92,9 +90,11 @@ int main(int argc, char *argv[])
     if (batchmode) {
 #ifdef SOCKET_EXPORT_ENABLE
 	while (fgets(buf, sizeof(buf), stdin) != NULL) {
-	    if (buf[0] == '{' || isalpha(buf[0])) {
+	    if (buf[0] == '{' || isalpha( (int) buf[0])) {
 		gps_unpack(buf, &gpsdata);
+#ifdef LIBGPS_DEBUG
 		libgps_dump_state(&gpsdata);
+#endif
 	    }
 	}
 #endif
@@ -104,10 +104,20 @@ int main(int argc, char *argv[])
 		      errno, gps_errstr(errno));
 	exit(EXIT_FAILURE);
     } else if (forwardmode) {
-	(void)gps_send(&collect, fmsg);
-	(void)gps_read(&collect);
+	if (gps_send(&collect, fmsg) == -1) {
+	  (void)fprintf(stderr,
+			"test_libgps: gps send error: %d, %s\n",
+			errno, gps_errstr(errno));
+	}
+	if (gps_read(&collect) == -1) {
+	  (void)fprintf(stderr,
+			"test_libgps: gps read error: %d, %s\n",
+			errno, gps_errstr(errno));
+	}
 #ifdef SOCKET_EXPORT_ENABLE
+#ifdef LIBGPS_DEBUG
 	libgps_dump_state(&collect);
+#endif
 #endif
 	(void)gps_close(&collect);
     } else {
@@ -127,7 +137,9 @@ int main(int argc, char *argv[])
 	    (void)gps_send(&collect, buf);
 	    (void)gps_read(&collect);
 #ifdef SOCKET_EXPORT_ENABLE
+#ifdef LIBGPS_DEBUG
 	    libgps_dump_state(&collect);
+#endif
 #endif
 	}
 	(void)gps_close(&collect);

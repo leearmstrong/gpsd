@@ -38,6 +38,10 @@ if bytes is str:  # In Python 2 these functions can be null transformations
         "Dummy stdio wrapper function."
         return stream
 
+    def get_bytes_stream(stream):
+        "Dummy stdio bytes buffer function."
+        return stream
+
 else:  # Otherwise we do something real
 
     def polystr(o):
@@ -68,19 +72,24 @@ else:  # Otherwise we do something real
         return io.TextIOWrapper(stream.buffer, encoding=BINARY_ENCODING,
                                 newline="\n", line_buffering=True)
 
+    def get_bytes_stream(stream):
+        "Standard input/output bytes buffer function"
+        return stream.buffer
+
 
 # some multipliers for interpreting GPS output
-METERS_TO_FEET	= 3.2808399	# Meters to U.S./British feet
-METERS_TO_MILES	= 0.00062137119	# Meters to miles
-METERS_TO_FATHOMS	= 0.54680665	# Meters to fathoms
-KNOTS_TO_MPH	= 1.1507794	# Knots to miles per hour
-KNOTS_TO_KPH	= 1.852		# Knots to kilometers per hour
-KNOTS_TO_MPS	= 0.51444444	# Knots to meters per second
-MPS_TO_KPH	= 3.6		# Meters per second to klicks/hr
-MPS_TO_MPH	= 2.2369363	# Meters/second to miles per hour
-MPS_TO_KNOTS	= 1.9438445	# Meters per second to knots
-
-# EarthDistance code swiped from Kismet and corrected
+# Note: A Texas Foot is ( meters * 3937/1200)
+#       (Texas Natural Resources Code, Subchapter D, Sec 21.071 - 79)
+#       not the same as an international fooot.
+METERS_TO_FEET	= 3.28083989501312	# Meters to U.S./British feet
+METERS_TO_MILES	= 0.000621371192237334	# Meters to miles
+METERS_TO_FATHOMS = 0.546806649168854	# Meters to fathoms
+KNOTS_TO_MPH	= 1.15077944802354	# Knots to miles per hour
+KNOTS_TO_KPH	= 1.852		        # Knots to kilometers per hour
+KNOTS_TO_MPS	= 0.514444444444445	# Knots to meters per second
+MPS_TO_KPH	= 3.6		        # Meters per second to klicks/hr
+MPS_TO_MPH	= 2.2369362920544	# Meters/second to miles per hour
+MPS_TO_KNOTS	= 1.9438444924406	# Meters per second to knots
 
 
 def Deg2Rad(x):
@@ -94,24 +103,30 @@ def Rad2Deg(x):
 
 
 def CalcRad(lat):
-    "Radius of curvature in meters at specified latitude."
-    a = 6378.137
-    e2 = 0.081082 * 0.081082
+    "Radius of curvature in meters at specified latitude WGS-84."
     # the radius of curvature of an ellipsoidal Earth in the plane of a
     # meridian of latitude is given by
     #
     # R' = a * (1 - e^2) / (1 - e^2 * (sin(lat))^2)^(3/2)
     #
-    # where a is the equatorial radius,
-    # b is the polar radius, and
-    # e is the eccentricity of the ellipsoid = sqrt(1 - b^2/a^2)
+    # where
+    #   a   is the equatorial radius (surface to center distance),
+    #   b   is the polar radius (surface to center distance),
+    #   e   is the first  eccentricity of the ellipsoid
+    #   e2  is e^2  = (a^2 - b^2) / a^2
+    #   es  is the second eccentricity of the ellipsoid (UNUSED)
+    #   es2 is es^2 = (a^2 - b^2) / b^2
     #
-    # a = 6378 km (3963 mi) Equatorial radius (surface to center distance)
-    # b = 6356.752 km (3950 mi) Polar radius (surface to center distance)
-    # e = 0.081082 Eccentricity
-    sc = math.sin(Deg2Rad(lat))
+    # for WGS-84:
+    # a   = 6378.137 km (3963 mi)
+    # b   = 6356.752314245 km (3950 mi)
+    # e2  = 0.00669437999014132
+    # es2 = 0.00673949674227643
+    a = 6378.137
+    e2 = 0.00669437999014132
+    sc = math.sin( math.radians(lat))
     x = a * (1.0 - e2)
-    z = 1.0 - e2 * sc * sc
+    z = 1.0 - e2 * pow(sc, 2)
     y = pow(z, 1.5)
     r = x / y
 
@@ -120,26 +135,96 @@ def CalcRad(lat):
 
 
 def EarthDistance(c1, c2):
-    "Distance in meters between two points specified in degrees."
+    """
+    Vincenty's formula (inverse method) to calculate the distance (in
+    kilometers or miles) between two points on the surface of a spheroid
+    WGS 84 accurate to 1mm!
+    """
+
     (lat1, lon1) = c1
     (lat2, lon2) = c2
-    x1 = CalcRad(lat1) * math.cos(Deg2Rad(lon1)) * math.sin(Deg2Rad(90 - lat1))
-    x2 = CalcRad(lat2) * math.cos(Deg2Rad(lon2)) * math.sin(Deg2Rad(90 - lat2))
-    y1 = CalcRad(lat1) * math.sin(Deg2Rad(lon1)) * math.sin(Deg2Rad(90 - lat1))
-    y2 = CalcRad(lat2) * math.sin(Deg2Rad(lon2)) * math.sin(Deg2Rad(90 - lat2))
-    z1 = CalcRad(lat1) * math.cos(Deg2Rad(90 - lat1))
-    z2 = CalcRad(lat2) * math.cos(Deg2Rad(90 -lat2))
-    a = (x1 *x2 + y1 *y2 + z1 *z2) /pow(CalcRad((lat1 +lat2) /2), 2)
-    # a should be in [1, -1] but can sometimes fall outside it by
-    # a very small amount due to rounding errors in the preceding
-    # calculations (this is prone to happen when the argument points
-    # are very close together).  Thus we constrain it here.
-    if abs(a) > 1:
-        a = 1
-    elif a < -1:
-        a = -1
-    return CalcRad((lat1 +lat2) / 2) * math.acos(a)
 
+    # WGS 84
+    a = 6378137  # meters
+    f = 1 / 298.257223563
+    b = 6356752.314245  # meters; b = (1 - f)a
+
+    MILES_PER_KILOMETER = 0.621371
+
+    MAX_ITERATIONS = 200
+    CONVERGENCE_THRESHOLD = 1e-12  # .000,000,000,001
+
+    # short-circuit coincident points
+    if lat1 == lat2 and lon1 == lon2:
+        return 0.0
+
+    U1 = math.atan((1 - f) * math.tan(math.radians(lat1)))
+    U2 = math.atan((1 - f) * math.tan(math.radians(lat2)))
+    L = math.radians(lon1 - lon2)
+    Lambda = L
+
+    sinU1 = math.sin(U1)
+    cosU1 = math.cos(U1)
+    sinU2 = math.sin(U2)
+    cosU2 = math.cos(U2)
+
+    for iteration in range(MAX_ITERATIONS):
+        sinLambda = math.sin(Lambda)
+        cosLambda = math.cos(Lambda)
+        sinSigma = math.sqrt((cosU2 * sinLambda) ** 2 +
+                             (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda) ** 2)
+        if sinSigma == 0:
+            return 0.0  # coincident points
+        cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda
+        sigma = math.atan2(sinSigma, cosSigma)
+        sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma
+        cosSqAlpha = 1 - sinAlpha ** 2
+        try:
+            cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha
+        except ZeroDivisionError:
+            cos2SigmaM = 0
+        C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha))
+        LambdaPrev = Lambda
+        Lambda = L + (1 - C) * f * sinAlpha * (sigma + C * sinSigma *
+                                               (cos2SigmaM + C * cosSigma *
+                                                (-1 + 2 * cos2SigmaM ** 2)))
+        if abs(Lambda - LambdaPrev) < CONVERGENCE_THRESHOLD:
+            break  # successful convergence
+    else:
+        # failure to converge
+        # fall back top EarthDistanceSmall
+        return EarthDistanceSmall(c1, c2)
+
+    uSq = cosSqAlpha * (a ** 2 - b ** 2) / (b ** 2)
+    A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)))
+    B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)))
+    deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma *
+                 (-1 + 2 * cos2SigmaM ** 2) - B / 6 * cos2SigmaM *
+                 (-3 + 4 * sinSigma ** 2) * (-3 + 4 * cos2SigmaM ** 2)))
+    s = b * A * (sigma - deltaSigma)
+
+    # return meters to 6 decimal places
+    return round(s, 6)
+
+def EarthDistanceSmall(c1, c2):
+    "Distance in meters between two close points specified in degrees."
+    # This calculation is known as an Equirectangular Projection
+    # fewer numeric issues for small angles that other methods
+    # the main use here is for when Vincenty's fails to converge.
+    (lat1, lon1) = c1
+    (lat2, lon2) = c2
+    avglat = (lat1 + lat2 ) /2
+    phi = math.radians( avglat )  # radians of avg latitude
+    # meters per degree at this latitude, corrected for WGS84 ellipsoid
+    # Note the wikipedia numbers are NOT ellipsoid corrected:
+    # https://en.wikipedia.org/wiki/Decimal_degrees#Precision
+    m_per_d = (111132.954 - 559.822 * math.cos(2 * phi)
+                          +   1.175 * math.cos(4 * phi))
+    dlat = (lat1 - lat2) * m_per_d
+    dlon = (lon1 - lon2) * m_per_d * math.cos( phi )
+
+    dist = math.sqrt( math.pow(dlat, 2) + math.pow(dlon, 2 ))
+    return dist;
 
 def MeterOffset(c1, c2):
     "Return offset in meters of second arg from first."
@@ -148,11 +233,10 @@ def MeterOffset(c1, c2):
     dx = EarthDistance((lat1, lon1), (lat1, lon2))
     dy = EarthDistance((lat1, lon1), (lat2, lon1))
     if lat1 < lat2:
-        dy *= -1
+        dy = -dy
     if lon1 < lon2:
-        dx *= -1
+        dx = -dx
     return (dx, dy)
-
 
 def isotime(s):
     "Convert timestamps in ISO8661 format to and from Unix time."

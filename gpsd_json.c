@@ -14,6 +14,17 @@ PERMISSIONS
 
 ***************************************************************************/
 
+#ifdef __linux__
+/* FreeBSD chokes on this */
+/* isascii() needs _XOPEN_SOURCE, 500 means X/Open 1995 */
+#define _XOPEN_SOURCE 500
+#endif /* __linux__ */
+
+/* vsnprintf() needs __DARWIN_C_LEVEL >= 200112L */
+#define __DARWIN_C_LEVEL 200112L
+/* strlcpy() needs _DARWIN_C_SOURCE */
+#define _DARWIN_C_SOURCE
+
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
@@ -184,7 +195,7 @@ void json_tpv_dump(const struct gps_device_t *session,
 	if (policy->timing) {
 	    char rtime_str[TIMESPEC_LEN];
 	    struct timespec rtime_tmp;
-	    (int)clock_gettime(CLOCK_REALTIME, &rtime_tmp);
+	    (void)clock_gettime(CLOCK_REALTIME, &rtime_tmp);
 	    timespec_str(&rtime_tmp, rtime_str, sizeof(rtime_str));
 	    str_appendf(reply, replylen, "\"rtime\":%s,", rtime_str);
 #ifdef PPS_ENABLE
@@ -1985,16 +1996,16 @@ void json_aivdm_dump(const struct ais_t *ais,
 			       ais->type6.dac1fid20.future2,
 			       json_stringify(buf1, sizeof(buf1),
 					      ais->type6.dac1fid20.berth_name));
-            if (scaled)
-		str_appendf(buf, buflen,
+		if (scaled)
+		    str_appendf(buf, buflen,
 			       "\"berth_lon\":%.3f,"
 			       "\"berth_lat\":%.3f,"
 			       "\"berth_depth\":%.1f}\r\n",
 			       ais->type6.dac1fid20.berth_lon / AIS_LATLON3_DIV,
 			       ais->type6.dac1fid20.berth_lat / AIS_LATLON3_DIV,
 			       ais->type6.dac1fid20.berth_depth * 0.1);
-            else
-                str_appendf(buf, buflen,
+		else
+		    str_appendf(buf, buflen,
 			       "\"berth_lon\":%d,"
 			       "\"berth_lat\":%d,"
 			       "\"berth_depth\":%u}\r\n",

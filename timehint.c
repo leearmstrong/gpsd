@@ -8,6 +8,17 @@
  * see the file COPYING in the distribution root for details.
  */
 
+#ifdef __linux__
+/* FreeBSD chokes on this */
+/* nice() needs _XOPEN_SOURCE, 500 means X/Open 1995 */
+#define _XOPEN_SOURCE 500
+#endif /* __linux__ */
+
+/* snprintf() needs __DARWIN_C_LEVEL >= 200112L */
+#define __DARWIN_C_LEVEL 200112L
+/* snprintf() needs _DARWIN_C_SOURCE */
+#define _DARWIN_C_SOURCE
+
 #include <string.h>
 #include <libgen.h>
 #include <stdbool.h>
@@ -17,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#include <time.h>        /* for timespec */
 #include <unistd.h>
 
 #include "timespec.h"
@@ -180,7 +192,7 @@ static volatile struct shmTime *ntpshm_alloc(struct gps_context_t *context)
 	    memset((void *)context->shmTime[i], 0, sizeof(struct shmTime));
 	    context->shmTime[i]->mode = 1;
 	    context->shmTime[i]->leap = LEAP_NOTINSYNC;
-	    context->shmTime[i]->precision = -1;	/* initially 0.5 sec */
+	    context->shmTime[i]->precision = -20;/* initially 1 micro sec */
 	    context->shmTime[i]->nsamples = 3;	/* stages of median filter */
 
 	    return context->shmTime[i];
@@ -221,7 +233,7 @@ int ntpshm_put(struct gps_device_t *session, volatile struct shmTime *shmseg, st
     char clock_str[TIMESPEC_LEN];
 
     /* Any NMEA will be about -1 or -2. Garmin GPS-18/USB is around -6 or -7. */
-    int precision = -1; /* default precision */
+    int precision = -20; /* default precision, 1 micro sec */
 
     if (shmseg == NULL) {
 	gpsd_log(&session->context->errout, LOG_RAW, "NTP:PPS: missing shm\n");
@@ -229,14 +241,14 @@ int ntpshm_put(struct gps_device_t *session, volatile struct shmTime *shmseg, st
     }
 
 #ifdef PPS_ENABLE
-    /* ntpd sets -20 for PPS refclocks, thus -20 precision */
     if (shmseg == session->shm_pps) {
+        /* precision is a floor so do not make it tight */
         if ( source_usb == session->sourcetype ) {
-	    /* if PPS over USB 1.1, then precision = -10 */
-	    precision = -10;
-        } else {
-	    /* likely PPS over serial, precision = -20 */
+	    /* if PPS over USB, then precision = -20, 1 micro sec  */
 	    precision = -20;
+        } else {
+	    /* likely PPS over serial, precision = -30, 1 nano sec */
+	    precision = -30;
         }
     }
 #endif	/* PPS_ENABLE */
@@ -246,9 +258,9 @@ int ntpshm_put(struct gps_device_t *session, volatile struct shmTime *shmseg, st
     timespec_str( &td->real, real_str, sizeof(real_str) );
     timespec_str( &td->clock, clock_str, sizeof(clock_str) );
     gpsd_log(&session->context->errout, LOG_PROG,
-	     "NTP: ntpshm_put(%s %s) %s @ %s\n",
+	     "NTP: ntpshm_put(%s,%d) %s @ %s\n",
 	     session->gpsdata.dev.path,
-	     (precision == -20) ? "pps" : "clock",
+	     precision,
 	     real_str, clock_str);
 
     return 1;
@@ -315,10 +327,15 @@ static void chrony_send(struct gps_device_t *session, struct timedelta_t *td)
     struct tm tm;
     int leap_notify = session->context->leap_notify;
 
-    /* insist that leap seconds only happen in june and december
+    /*
+     * insist that leap seconds only happen in june and december
      * GPS emits leap pending for 3 months prior to insertion
      * NTP expects leap pending for only 1 month prior to insertion
-     * Per http://bugs.ntp.org/1090 */
+     * Per http://bugs.ntp.org/1090
+     *
+     * ITU-R TF.460-6, Section 2.1, says lappe seconds can be primarily
+     * in Jun/Dec but may be in March or September
+     */
     (void)gmtime_r( &(td->real.tv_sec), &tm);
     if ( 5 != tm.tm_mon && 11 != tm.tm_mon ) {
         /* Not june, not December, no way */
@@ -336,7 +353,7 @@ static void chrony_send(struct gps_device_t *session, struct timedelta_t *td)
     /* calculate the offset as a timespec to not lose precision */
     TS_SUB( &offset, &td->real, &td->clock);
     /* if tv_sec greater than 2 then tv_nsec loses precision, but
-     * not a big deal as slewing will bbe required */
+     * not a big deal as slewing will be required */
     sample.offset = TSTONS( &offset );
     sample._pad = 0;
 
@@ -442,14 +459,21 @@ void ntpshm_link_activate(struct gps_device_t *session)
 	} else {
 	    init_hook(session);
 	    session->pps_thread.report_hook = report_hook;
+	    #ifdef MAGIC_HAT_ENABLE
 	    /*
-	     * The Raspberry Pi kludge. If we're using /dev/ttyAMA0, 
-	     * and there is a static /dev/pps0, and we have access because
-	     * we're root, assume we want to use KPPS. 
+	     * The HAT kludge. If we're using the HAT GPS on a
+	     * Raspberry Pi or a workalike like the ODROIDC2, and
+	     * there is a static "first PPS", and we have access because
+	     * we're root, assume we want to use KPPS.
 	     */
-	    if (strcmp(session->pps_thread.devicename, "/dev/ttyAMA0") == 0
-	    		&& access("/dev/pps0", R_OK | W_OK) == 0)
-		session->pps_thread.devicename = "/dev/pps0";
+	    if (strcmp(session->pps_thread.devicename, MAGIC_HAT_GPS) == 0
+		|| strcmp(session->pps_thread.devicename,
+		          MAGIC_LINK_GPS) == 0) {
+		char *first_pps = pps_get_first();
+		if (access(first_pps, R_OK | W_OK) == 0)
+			session->pps_thread.devicename = first_pps;
+		}
+	    #endif /* MAGIC_HAT_ENABLE */
 	    pps_thread_activate(&session->pps_thread);
 	}
     }

@@ -1,9 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #
 # @MASTER@
 #
 # This is the CGI that processes the form return from GPS information form.
-# We use Python 2.4 because ibiblio doesn't support a later version in CGI.
 #
 # The wackiness with output_sample_com happens because the user has to click
 # through twice - once to review and once to submit.  Thus the content has
@@ -99,7 +98,7 @@ if hasRequiredElements(form) and form.getvalue("action") == "Send Report":
     smtp = smtplib.SMTP("localhost")
     #smtp.set_debuglevel(1)
     try:
-        smtp.sendmail(servaddr, ["esr@thyrsus.com"], msg)
+        smtp.sendmail(servaddr, [to_address], msg)
         smtp.quit()
         print "<H1>New device report accepted.</H1>\n"
         print "<p>Your report on the %s %s was successfully recorded. Thanks for helping improve GPSD.\n" \
@@ -379,9 +378,9 @@ print '''
 <hr>
 <h2>GPSD compatibility</h2>
 
-<p>Please tell us what version you tested with.  If you used us a release,
-give us the full release number, like <code>3.5</code>.  If you built
-your code from our development repository please give the revision ID.</p>
+<p>Please tell us what version you tested with.  If you used a published
+release, give us the full release number, like <code>3.5</code>.  If you built
+your code from our development repository, please give the revision ID.</p>
 
 <p><em>GPSD version:&nbsp;</em>
 <input type="text"
